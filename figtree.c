@@ -84,10 +84,10 @@ struct ft_node* ftn_insert(struct ft_node* this, struct ft_ent* newent, int inde
                            struct ft_node* leftChild,
                            struct ft_node* rightChild) {
     ASSERT(this->entries_len + 1 == this->subtrees_len, "entries-subtree invariant violated in ftn_insert");
-    ASSERT(index >= 0 && index < this->entries_len &&
-           (index == 0 || fte_overlaps(newent, &this->entries[index - 1])) &&
+    ASSERT(index >= 0 && index <= this->entries_len &&
+           (index == 0 || !fte_overlaps(newent, &this->entries[index - 1])) &&
            (index == this->entries_len ||
-            fte_overlaps(newent, &this->entries[index])), "bad ftn_insert");
+            !fte_overlaps(newent, &this->entries[index])), "bad ftn_insert");
     _ftn_entries_add(this, index, newent);
     this->subtrees[index] = leftChild;
     _ftn_subtrees_add(this, index + 1, rightChild);
