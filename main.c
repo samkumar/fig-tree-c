@@ -9,5 +9,5 @@ int main(void) {
     printf("%d\n", i_contains_val(&i, 7));
 
     ft_init(&ft);
-    ft_write(&ft, &i, &i);
+    ft_write(&ft, 1, 7, &i);
 }

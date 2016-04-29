@@ -274,7 +274,7 @@ struct insertargs {
 void insertargs_init(struct insertargs* this, struct interval* range,
                      figtree_value_t value, struct ft_node* root) {
     int maxdepth = root->HEIGHT + 1;
-    this->range = i_copy(range);
+    this->range = range;
     this->value = value;
     this->path = mem_alloc(maxdepth * (sizeof(struct ft_node*)));
     this->path_len = 0;
@@ -295,7 +295,7 @@ struct insertcont {
     struct insertargs* rightc;
 };
 
-struct insertcont* _ft_insert(struct figtree* this, struct insertargs* args,
+struct insertcont _ft_insert(struct figtree* this, struct insertargs* args,
                               bool rightcontinuation) {
     struct interval* range = args->range;
     figtree_value_t value = args->value;
@@ -303,14 +303,16 @@ struct insertcont* _ft_insert(struct figtree* this, struct insertargs* args,
     int* pathIndices = args->pathIndices;
     struct ft_node* currnode = args->at;
     struct interval* valid = &args->valid;
+    struct insertcont ic;
 
     int finalsharedindex = args->pathIndices_len - 1;
 
     /* Record the residual groups [star1, range->left - 1] and
        [range->right + 1, star2]. */
 
-    struct insertcont* ic = mem_alloc(sizeof(struct insertcont));
     int numentries, i;
+
+    memset(&ic, 0x00, sizeof(struct insertcont));
 
     outerloop:
     while (currnode != NULL) {
@@ -333,17 +335,17 @@ struct insertcont* _ft_insert(struct figtree* this, struct insertargs* args,
                 path[args->path_len++] = currnode;
                 if (currival->left < range->left) {
                     // Create a continuation for the left subinterval
-                    ic->leftc = mem_alloc(sizeof(struct insertargs));
-                    ic->leftc->range = i_new(currival->left, range->left - 1);
-                    ic->leftc->value = current->value;
-                    ic->leftc->path = path;
-                    ic->leftc->path_len = args->path_len;
-                    ic->leftc->pathIndices = pathIndices;
+                    ic.leftc = mem_alloc(sizeof(struct insertargs));
+                    ic.leftc->range = i_new(currival->left, range->left - 1);
+                    ic.leftc->value = current->value;
+                    ic.leftc->path = path;
+                    ic.leftc->path_len = args->path_len;
+                    ic.leftc->pathIndices = pathIndices;
                     // A new entry is to be added to pathIndices later
-                    ic->leftc->pathIndices_len = args->pathIndices_len + 1;
-                    ic->leftc->at = currnode->subtrees[i];
-                    memcpy(&ic->leftc->valid, valid, sizeof(struct interval));
-                    i_restrict_range(&ic->leftc->valid, i == 0 ? BYTE_INDEX_MIN :
+                    ic.leftc->pathIndices_len = args->pathIndices_len + 1;
+                    ic.leftc->at = currnode->subtrees[i];
+                    memcpy(&ic.leftc->valid, valid, sizeof(struct interval));
+                    i_restrict_range(&ic.leftc->valid, i == 0 ? BYTE_INDEX_MIN :
                                      previval->right + 1,
                                      currival->left - 1, true);
                 }
@@ -368,18 +370,18 @@ struct insertcont* _ft_insert(struct figtree* this, struct insertargs* args,
                 ftn_replaceEntries(currnode, i, j, fte_new(range, value));
                 if (previous->irange.right > range->right) {
                     // Create a continuation for the right subinterval
-                    ic->rightc = mem_alloc(sizeof(struct insertargs));
-                    ic->rightc->range = i_new(range->right + 1,
+                    ic.rightc = mem_alloc(sizeof(struct insertargs));
+                    ic.rightc->range = i_new(range->right + 1,
                                               previous->irange.right);
-                    ic->rightc->value = previous->value;
-                    ic->rightc->path = path;
-                    ic->rightc->path_len = args->path_len;
-                    ic->rightc->pathIndices = pathIndices;
+                    ic.rightc->value = previous->value;
+                    ic.rightc->path = path;
+                    ic.rightc->path_len = args->path_len;
+                    ic.rightc->pathIndices = pathIndices;
                     // A new entry is to be added to pathIndices later
-                    ic->rightc->pathIndices_len = args->pathIndices_len + 1;
-                    ic->rightc->at = currnode->subtrees[i + 1];
-                    memcpy(&ic->rightc->valid, valid, sizeof(struct interval));
-                    i_restrict_range(&ic->rightc->valid,
+                    ic.rightc->pathIndices_len = args->pathIndices_len + 1;
+                    ic.rightc->at = currnode->subtrees[i + 1];
+                    memcpy(&ic.rightc->valid, valid, sizeof(struct interval));
+                    i_restrict_range(&ic.rightc->valid,
                                      previous->irange.right + 1,
                                      j == numentries ? BYTE_INDEX_MAX :
                                      current->irange.left - 1, true);
@@ -511,8 +513,26 @@ struct insertcont* _ft_insert(struct figtree* this, struct insertargs* args,
     return ic;
 }
 
-void ft_write(struct figtree* this, struct interval* range,
+void ft_write(struct figtree* this, byte_index_t start, byte_index_t end,
               figtree_value_t value) {
-    /* NOT IMPLEMENTED */
-    printf("ft_write: %p %p %p\n", (void*) this, (void*) range, value);
+    struct interval range;
+    struct insertargs iargs;
+    struct insertcont starinserts;
+    struct insertcont newstarinserts;
+    
+    i_init(&range, start, end);
+    insertargs_init(&iargs, &range, value, this->root);
+    starinserts = _ft_insert(this, &iargs, false);
+    if (starinserts.rightc != NULL) {
+        newstarinserts = _ft_insert(this, starinserts.rightc, true);
+        ASSERT(newstarinserts.leftc == NULL && newstarinserts.rightc == NULL,
+               "Recursive star insert on right continutation");
+    }
+    if (starinserts.leftc != NULL) {
+        newstarinserts = _ft_insert(this, starinserts.leftc, false);
+        ASSERT(newstarinserts.leftc == NULL && newstarinserts.rightc == NULL,
+               "Recursive star insert on left continuation");
+    }
+
+    // TODO free the continuations and their lists
 }

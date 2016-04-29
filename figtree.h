@@ -14,7 +14,7 @@ typedef struct figtree {
 } figtree_t;
 
 void ft_init(struct figtree* this);
-void ft_write(struct figtree* this, struct interval* range,
+void ft_write(struct figtree* this, byte_index_t start, byte_index_t end,
               figtree_value_t value);
 
 #endif
