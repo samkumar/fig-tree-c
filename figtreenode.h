@@ -32,6 +32,6 @@ struct ft_node* ftn_insert(struct ft_node* this, struct ft_ent* newent,
                            struct ft_node* rightChild);
 void ftn_replaceEntries(struct ft_node* this, int start, int end,
                         struct interval* newent_interval,
-                        figtree_value_t newentry_value);
+                        figtree_value_t newent_value);
 void ftn_pruneTo(struct ft_node* this, struct interval* valid);
 void ftn_free(struct ft_node* this);

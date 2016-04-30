@@ -109,21 +109,28 @@ struct ft_node* ftn_insert(struct ft_node* this, struct ft_ent* newent,
     return NULL;
 }
 
+/* Replaces the entries from start, inclusive, to end, exclusive, with the
+ * single provided entry.
+ */
 void ftn_replaceEntries(struct ft_node* this, int start, int end,
                         struct interval* newent_interval,
-                        figtree_value_t newentry_value) {
+                        figtree_value_t newent_value) {
     ASSERT(this->entries_len + 1 == this->subtrees_len, "entry-subtree invariant violated in ftn_replaceEntries");
     ASSERT(start >= 0 && start < this->entries_len
            && end >= 0 && end <= this->entries_len, "bad ftn_replaceEntries");
+    ASSERT(end > start, "replaceEntries called on empty range");
     
     memcpy(&this->entries[start].irange, newent_interval,
            sizeof(struct interval));
-    this->entries[start].value = newentry_value;
+    this->entries[start].value = newent_value;
     
     memmove(&this->entries[start + 1], &this->entries[end],
             (this->entries_len - end) * sizeof(struct ft_ent));
     memmove(&this->subtrees[start + 1], &this->subtrees[end],
             (this->subtrees_len - end) * sizeof(struct ft_node*));
+
+    this->entries_len -= (end - start - 1);
+    this->subtrees_len -= (end - start - 1);
 }
 
 void ftn_pruneTo(struct ft_node* this, struct interval* valid) {
