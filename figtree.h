@@ -4,11 +4,6 @@
 #include "interval.h"
 #include "utils.h"
 
-typedef long int figtree_value_t;
-
-#define FT_ORDER 5
-#define FT_SPLITLIMIT (1 + (FT_ORDER << 1))
-
 void ftn_free(struct ft_node* this);
 
 typedef struct figtree {
