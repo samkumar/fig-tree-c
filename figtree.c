@@ -69,8 +69,11 @@ struct ft_node* ftn_new(int height, bool make_height) {
 
 void ftn_clear(struct ft_node* this, bool make_height) {
     struct ft_node* firstchild;
-    // TODO free everything
-
+    int i;
+    for (i = 0; i < this->subtrees_len; i++) {
+        subtree_free(&this->subtrees[i]);
+    }
+    
     if (this->HEIGHT == 0 || !make_height) {
         firstchild = NULL;
     } else {
@@ -97,7 +100,6 @@ struct ft_node* ftn_insert(struct ft_node* this, struct ft_ent* newent,
         // Split the node and push the middle entry to parent
         struct ft_node* left = ftn_new(this->HEIGHT, false);
         struct ft_node* right = ftn_new(this->HEIGHT, false);
-        struct ft_node* pushup;
         int i;
 
         left->entries_len = FT_ORDER;
@@ -113,14 +115,17 @@ struct ft_node* ftn_insert(struct ft_node* this, struct ft_ent* newent,
             right->subtrees[i + 1] = this->subtrees[FT_ORDER + i + 2];
         }
 
-        pushup = ftn_new(this->HEIGHT + 1, false);
-        pushup->entries[0] = this->entries[FT_ORDER];
-        pushup->entries_len = 1;
-        subtree_set(&pushup->subtrees[0], left);
-        subtree_set(&pushup->subtrees[1], right);
-        pushup->subtrees_len = 2;
+        /* This node no longe exists... so we might as well reuse its memory for
+         * the node that got pushed up the tree.
+         */
+        this->entries[0] = this->entries[FT_ORDER];
+        this->entries_len = 1;
+        subtree_set(&this->subtrees[0], left);
+        subtree_set(&this->subtrees[1], right);
+        this->subtrees_len = 2;
+        this->HEIGHT++;
 
-        return pushup;
+        return this;
     }
 
     return NULL;
@@ -236,7 +241,6 @@ void ftn_pruneTo(struct ft_node* this, struct interval* valid) {
         // don't assign to subtree, since henceforth we only need to remove
     }   
 
-    // TODO free the subtrees!
     performdeletes:
     for (i = 0, j = 0; i < this->entries_len; i++) {
         if (!entrydel[i]) {
@@ -246,14 +250,28 @@ void ftn_pruneTo(struct ft_node* this, struct interval* valid) {
     }
     this->entries_len = j;
     for (i = 0, j = 0; i < this->subtrees_len; i++) {
-        if (!subtreedel[i]) {
+        if (subtreedel[i]) {
+            subtree_free(&this->subtrees[i]);
+        } else {
             this->subtrees[j] = this->subtrees[i];
             j++;
         }
     }
     this->subtrees_len = j;
 
-    ASSERT(this->entries_len + 1 == this->subtrees_len, "entries-subtree invariant violated after pruning");
+    ASSERT(this->entries_len + 1 == this->subtrees_len,
+           "entries-subtree invariant violated after pruning");
+}
+
+void ftn_free(struct ft_node* this) {
+    /* First, free all subtrees. */
+    int i;
+    for (i = 0; i < this->subtrees_len; i++) {
+        subtree_free(&this->subtrees[i]);
+    }
+
+    /* Then, free this node. */
+    mem_free(this);
 }
 
 
@@ -264,7 +282,7 @@ void ft_init(struct figtree* this) {
 }
 
 struct insertargs {
-    struct interval* range;
+    struct interval range;
     figtree_value_t value;
     struct ft_node** path;
     int path_len;
@@ -274,39 +292,21 @@ struct insertargs {
     struct interval valid;
 };
 
-void insertargs_init(struct insertargs* this, struct interval* range,
-                     figtree_value_t value, struct ft_node* root) {
-    int maxdepth = root->HEIGHT + 1;
-    this->range = range;
-    this->value = value;
-    this->path = mem_alloc(maxdepth * (sizeof(struct ft_node*)));
-    this->path_len = 0;
-    this->pathIndices = mem_alloc(maxdepth * (sizeof(int)));
-    this->pathIndices_len = 0;
-    this->at = root;
-    i_init(&this->valid, BYTE_INDEX_MIN, BYTE_INDEX_MAX);
-}
-
-void insertargs_destroy(struct insertargs* this) {
-    mem_free(this->range);
-    mem_free(this->path);
-    mem_free(this->pathIndices);
-}
-
 struct insertcont {
-    struct insertargs* leftc;
-    struct insertargs* rightc;
+    bool hasleftc;
+    struct insertargs leftc;
+    bool hasrightc;
+    struct insertargs rightc;
 };
 
-struct insertcont _ft_insert(struct figtree* this, struct insertargs* args,
-                              bool rightcontinuation) {
-    struct interval* range = args->range;
+void _ft_insert(struct figtree* this, struct insertargs* args,
+                bool rightcontinuation, struct insertcont* ic) {
+    struct interval* range = &args->range;
     figtree_value_t value = args->value;
     struct ft_node** path = args->path;
     int* pathIndices = args->pathIndices;
     struct ft_node* currnode = args->at;
     struct interval* valid = &args->valid;
-    struct insertcont ic;
 
     int finalsharedindex = args->pathIndices_len - 1;
 
@@ -315,7 +315,7 @@ struct insertcont _ft_insert(struct figtree* this, struct insertargs* args,
 
     int numentries, i;
 
-    memset(&ic, 0x00, sizeof(struct insertcont));
+    memset(ic, 0x00, sizeof(struct insertcont));
 
     outerloop:
     while (currnode != NULL) {
@@ -338,17 +338,17 @@ struct insertcont _ft_insert(struct figtree* this, struct insertargs* args,
                 path[args->path_len++] = currnode;
                 if (currival->left < range->left) {
                     // Create a continuation for the left subinterval
-                    ic.leftc = mem_alloc(sizeof(struct insertargs));
-                    ic.leftc->range = i_new(currival->left, range->left - 1);
-                    ic.leftc->value = current->value;
-                    ic.leftc->path = path;
-                    ic.leftc->path_len = args->path_len;
-                    ic.leftc->pathIndices = pathIndices;
+                    ic->hasleftc = true;
+                    i_init(&ic->leftc.range, currival->left, range->left - 1);
+                    ic->leftc.value = current->value;
+                    ic->leftc.path = path;
+                    ic->leftc.path_len = args->path_len;
+                    ic->leftc.pathIndices = pathIndices;
                     // A new entry is to be added to pathIndices later
-                    ic.leftc->pathIndices_len = args->pathIndices_len + 1;
-                    ic.leftc->at = subtree_get(&currnode->subtrees[i]);
-                    memcpy(&ic.leftc->valid, valid, sizeof(struct interval));
-                    i_restrict_range(&ic.leftc->valid, i == 0 ? BYTE_INDEX_MIN :
+                    ic->leftc.pathIndices_len = args->pathIndices_len + 1;
+                    ic->leftc.at = subtree_get(&currnode->subtrees[i]);
+                    memcpy(&ic->leftc.valid, valid, sizeof(struct interval));
+                    i_restrict_range(&ic->leftc.valid, i == 0 ? BYTE_INDEX_MIN :
                                      previval->right + 1,
                                      currival->left - 1, true);
                 }
@@ -373,18 +373,18 @@ struct insertcont _ft_insert(struct figtree* this, struct insertargs* args,
                 ftn_replaceEntries(currnode, i, j, fte_new(range, value));
                 if (previous->irange.right > range->right) {
                     // Create a continuation for the right subinterval
-                    ic.rightc = mem_alloc(sizeof(struct insertargs));
-                    ic.rightc->range = i_new(range->right + 1,
-                                              previous->irange.right);
-                    ic.rightc->value = previous->value;
-                    ic.rightc->path = path;
-                    ic.rightc->path_len = args->path_len;
-                    ic.rightc->pathIndices = pathIndices;
+                    ic->hasrightc = true;
+                    i_init(&ic->rightc.range, range->right + 1,
+                           previous->irange.right);
+                    ic->rightc.value = previous->value;
+                    ic->rightc.path = path;
+                    ic->rightc.path_len = args->path_len;
+                    ic->rightc.pathIndices = pathIndices;
                     // A new entry is to be added to pathIndices later
-                    ic.rightc->pathIndices_len = args->pathIndices_len + 1;
-                    ic.rightc->at = subtree_get(&currnode->subtrees[i + 1]);
-                    memcpy(&ic.rightc->valid, valid, sizeof(struct interval));
-                    i_restrict_range(&ic.rightc->valid,
+                    ic->rightc.pathIndices_len = args->pathIndices_len + 1;
+                    ic->rightc.at = subtree_get(&currnode->subtrees[i + 1]);
+                    memcpy(&ic->rightc.valid, valid, sizeof(struct interval));
+                    i_restrict_range(&ic->rightc.valid,
                                      previous->irange.right + 1,
                                      j == numentries ? BYTE_INDEX_MAX :
                                      current->irange.left - 1, true);
@@ -424,20 +424,26 @@ struct insertcont _ft_insert(struct figtree* this, struct insertargs* args,
     treeinsertion:
     if (currnode == NULL) {
         // In this case, we actually need to do an insertion
+        struct ft_ent toinsert;
         struct ft_node* rv = NULL;
-        struct ft_ent* topush = fte_new(range, value);
+        struct ft_node* topushnode = NULL;
+        struct ft_ent* topushent = &toinsert;
         struct ft_node* left = NULL;
         struct ft_node* right = NULL;
         struct ft_node* insertinto;
         int insertindex;
         int pathindex;
 
-        for (pathindex = args->pathIndices_len - 1; pathindex >= 0; pathindex--) {
+        memcpy(&toinsert.irange, range, sizeof(struct interval));
+        toinsert.value = value;
+
+        for (pathindex =
+                 args->pathIndices_len - 1; pathindex >= 0; pathindex--) {
             insertinto = path[pathindex];
             insertindex = pathIndices[pathindex];
-            // TODO free rv, keeping the entry and subtrees
-            rv = ftn_insert(insertinto, topush, insertindex, left, right);
-
+            rv = ftn_insert(insertinto, topushent, insertindex, left, right);
+            mem_free(topushnode);
+            
             if (rightcontinuation) {
                 /*
                  * All indices in the pathIndices and path lists at or before
@@ -461,14 +467,15 @@ struct insertcont _ft_insert(struct figtree* this, struct insertargs* args,
 
                 if (rv != NULL) {
                     /* If this node is being split, then there are some
-                     * complications. We need to change the node itself along the
-                     * path. We also need to adjust the index accordingly.
+                     * complications. We need to change the node itself along
+                     * the path. We also need to adjust the index accordingly.
                      */
                     if (insertindex <= FT_ORDER) {
                         path[pathindex] = subtree_get(&rv->subtrees[0]);
                     } else {
                         path[pathindex] = subtree_get(&rv->subtrees[1]);
-                        pathIndices[pathindex] = (insertindex -= (FT_ORDER + 1));
+                        pathIndices[pathindex] =
+                            (insertindex -= (FT_ORDER + 1));
                     }
                 }
             }
@@ -483,9 +490,9 @@ struct insertcont _ft_insert(struct figtree* this, struct insertargs* args,
                 if (rightcontinuation && pathindex > finalsharedindex) {
                     pathIndices[finalsharedindex]--;
                 }
-                goto endtreeinsertion;
+                return;
             }
-            topush = &rv->entries[0];
+            topushent = &rv->entries[0];
             left = subtree_get(&rv->subtrees[0]);
             right = subtree_get(&rv->subtrees[1]);
         }
@@ -502,7 +509,8 @@ struct insertcont _ft_insert(struct figtree* this, struct insertargs* args,
             if (nextpathmember == subtree_get(&rv->subtrees[1])) {
                 pathIndices[0] = 1;
             } else {
-                ASSERT(nextpathmember == subtree_get(&rv->subtrees[0]), "First element of path is not child of newly pushed up root");
+                ASSERT(nextpathmember == subtree_get(&rv->subtrees[0]),
+                       "First element of path is not a child of the new root");
                 pathIndices[0] = 0;
             }
             finalsharedindex++;
@@ -512,30 +520,45 @@ struct insertcont _ft_insert(struct figtree* this, struct insertargs* args,
         args->path_len = finalsharedindex;
         args->pathIndices_len = finalsharedindex;
     }
-    endtreeinsertion:
-    return ic;
 }
 
 void ft_write(struct figtree* this, byte_index_t start, byte_index_t end,
               figtree_value_t value) {
-    struct interval range;
+    // Plus one because the height of the tree may increase on insert
+    int maxdepth = this->root->HEIGHT + 1;
+    struct ft_node* path[maxdepth];
+    int pathIndices[maxdepth];
     struct insertargs iargs;
     struct insertcont starinserts;
     struct insertcont newstarinserts;
+
+    i_init(&iargs.range, start, end);
+    iargs.value = value;
+    iargs.path = path;
+    iargs.path_len = 0;
+    iargs.pathIndices = pathIndices;
+    iargs.pathIndices_len = 0;
+    iargs.at = this->root;
+    i_init(&iargs.valid, BYTE_INDEX_MIN, BYTE_INDEX_MAX);
     
-    i_init(&range, start, end);
-    insertargs_init(&iargs, &range, value, this->root);
-    starinserts = _ft_insert(this, &iargs, false);
-    if (starinserts.rightc != NULL) {
-        newstarinserts = _ft_insert(this, starinserts.rightc, true);
-        ASSERT(newstarinserts.leftc == NULL && newstarinserts.rightc == NULL,
+    _ft_insert(this, &iargs, false, &starinserts);
+    if (starinserts.hasrightc) {
+        _ft_insert(this, &starinserts.rightc, true, &newstarinserts);
+        ASSERT(!newstarinserts.hasleftc && !newstarinserts.hasrightc,
                "Recursive star insert on right continutation");
     }
-    if (starinserts.leftc != NULL) {
-        newstarinserts = _ft_insert(this, starinserts.leftc, false);
-        ASSERT(newstarinserts.leftc == NULL && newstarinserts.rightc == NULL,
+    if (starinserts.hasleftc) {
+        _ft_insert(this, &starinserts.leftc, false, &newstarinserts);
+        ASSERT(!newstarinserts.hasleftc && !newstarinserts.hasrightc,
                "Recursive star insert on left continuation");
     }
 
-    // TODO free the continuations and their lists
+    // Free the (aliased) lists of the continuations
+    if (starinserts.hasleftc) {
+        mem_free(starinserts.leftc.path);
+        mem_free(starinserts.leftc.pathIndices);
+    } else if (starinserts.hasrightc) {
+        mem_free(starinserts.rightc.path);
+        mem_free(starinserts.rightc.pathIndices);
+    }
 }

@@ -22,5 +22,6 @@ void* mem_alloc(size_t s);
 void mem_free(void* ptr);
 void subtree_set(struct subtree_ptr* sptr, struct ft_node* st);
 struct ft_node* subtree_get(struct subtree_ptr* sptr);
+void subtree_free(struct subtree_ptr* sptr);
 
 #endif

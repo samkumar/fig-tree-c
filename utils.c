@@ -3,6 +3,11 @@
 #include <stdio.h>
 
 #include "utils.h"
+#include "figtree.h"
+
+/* Allows certain functionality to be customized. In particular, allows lazy
+ * loading of Fig Tree Nodes.
+ */
 
 void my_assert(bool x, char* desc) {
     if (!x) {
@@ -25,4 +30,11 @@ void subtree_set(struct subtree_ptr* sptr, struct ft_node* st) {
 
 struct ft_node* subtree_get(struct subtree_ptr* sptr) {
     return sptr->st;
+}
+
+void subtree_free(struct subtree_ptr* sptr) {
+    if (sptr->st != NULL) {
+        ftn_free(sptr->st);
+        sptr->st = NULL;
+    }
 }
