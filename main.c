@@ -8,6 +8,9 @@
 #define MAX_FILE_SIZE (1 << BYTE_INDEX_BITS)
 #define BYTE_INDEX_MASK (MAX_FILE_SIZE - 1)
 
+#define PRINT_FREQ_BITS 20
+#define PRINT_FREQ_MASK ((1 << PRINT_FREQ_BITS) - 1)
+
 void test_figtree(unsigned int seed) {
     struct figtree ft;
     int i;
@@ -15,7 +18,9 @@ void test_figtree(unsigned int seed) {
 
     i = 0;
     while (true) {
-        printf("Iteration %d\n", ++i);
+        if (((++i) & PRINT_FREQ_MASK) == 0) {
+            printf("Iteration 0x%x (%d)\n", i, i);
+        }
         byte_index_t start = (byte_index_t) (rand_r(&seed) & BYTE_INDEX_MASK);
         byte_index_t end = (byte_index_t) (rand_r(&seed) & BYTE_INDEX_MASK);
         int value = rand_r(&seed);

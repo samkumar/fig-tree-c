@@ -80,8 +80,8 @@ void ftn_clear(struct ft_node* this, bool make_height) {
     this->subtrees_len = 1;
 }
 
-struct ft_node* ftn_insert(struct ft_node* this, struct ft_ent* newent, int index,
-                           struct ft_node* leftChild,
+struct ft_node* ftn_insert(struct ft_node* this, struct ft_ent* newent,
+                           int index, struct ft_node* leftChild,
                            struct ft_node* rightChild) {
     ASSERT(this->entries_len + 1 == this->subtrees_len, "entries-subtree invariant violated in ftn_insert");
     ASSERT(index >= 0 && index <= this->entries_len &&
@@ -134,7 +134,7 @@ void ftn_replaceEntries(struct ft_node* this, int start, int end,
     memmove(&this->entries[start + 1], &this->entries[end],
             (this->entries_len - end) * sizeof(struct ft_ent));
     memmove(&this->subtrees[start + 1], &this->subtrees[end],
-            (this->subtrees_len - end) * sizeof(struct ft_node));
+            (this->subtrees_len - end) * sizeof(struct ft_node*));
 }
 
 void ftn_pruneTo(struct ft_node* this, struct interval* valid) {
@@ -165,11 +165,11 @@ void ftn_pruneTo(struct ft_node* this, struct interval* valid) {
         entrydel[i] = true;
         subtreedel[i] = true;
 
-        ASSERT(i <= this->entries_len, "iterated past end of entries (#1)");
-        if (i == this->entries_len) {
+        ASSERT(i < this->entries_len, "iterated past end of entries (#1)");
+        if (++i == this->entries_len) {
             goto performdeletes;
         }
-        entryint = &this->entries[++i].irange;
+        entryint = &this->entries[i].irange;
         subtree = this->subtrees[i];
     }
 
@@ -181,21 +181,20 @@ void ftn_pruneTo(struct ft_node* this, struct interval* valid) {
         // In case the valid boundary is in the middle of this interval
         i_restrict_int(entryint, valid, false);
 
-        ASSERT(i <= this->entries_len, "iterated past end of entries (#2)");
-        if (i == this->entries_len) {
+        ASSERT(i < this->entries_len, "iterated past end of entries (#2)");
+        if (++i == this->entries_len) {
             goto performdeletes;
         }
-        entryint = &this->entries[++i].irange;
+        entryint = &this->entries[i].irange;
         subtree = this->subtrees[i];
     }
 
     while (i_contains_int(valid, entryint)) {
-        ASSERT(i <= this->entries_len, "iterated past end of entries (#3)");
-        if (i == this->entries_len) {
+        ASSERT(i < this->entries_len, "iterated past end of entries (#3)");
+        if (++i == this->entries_len) {
             goto performdeletes;
         }
-        
-        entryint = &this->entries[++i].irange;
+        entryint = &this->entries[i].irange;
         subtree = this->subtrees[i];
     }
 
@@ -215,11 +214,11 @@ void ftn_pruneTo(struct ft_node* this, struct interval* valid) {
         // In case the valid boundary is in the middle of this interval
         i_restrict_int(entryint, valid, false);
 
-        ASSERT(i <= this->entries_len, "iterated past end of entries (#4)");
-        if (i == this->entries_len) {
+        ASSERT(i < this->entries_len, "iterated past end of entries (#4)");
+        if (++i == this->entries_len) {
             goto performdeletes;
         }
-        entryint = &this->entries[++i].irange;
+        entryint = &this->entries[i].irange;
         subtree = this->subtrees[i + 1];
     }
 
@@ -227,11 +226,11 @@ void ftn_pruneTo(struct ft_node* this, struct interval* valid) {
         entrydel[i] = true;
         subtreedel[i + 1] = true;
 
-        ASSERT(i <= this->entries_len, "iterated past end of entries (#5)");
-        if (i == this->entries_len) {
+        ASSERT(i < this->entries_len, "iterated past end of entries (#5)");
+        if (++i == this->entries_len) {
             goto performdeletes;
         }
-        entryint = &this->entries[++i].irange;
+        entryint = &this->entries[i].irange;
         // don't assign to subtree, since henceforth we only need to remove
     }   
 
@@ -250,7 +249,12 @@ void ftn_pruneTo(struct ft_node* this, struct interval* valid) {
             j++;
         }
     }
+    if (j == 0) {
+        printf("Setting subtrees_len to %d\n", j);
+    }
     this->subtrees_len = j;
+
+    ASSERT(this->entries_len + 1 == this->subtrees_len, "entries-subtree invariant violated after pruning");
 }
 
 
