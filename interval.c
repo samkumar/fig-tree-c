@@ -4,21 +4,7 @@
 #include <string.h>
 
 #include "interval.h"
-
-void my_assert(bool x, char* desc) {
-    if (!x) {
-        fprintf(stderr, "Assertion failed: %s\n", desc);
-        exit(1);
-    }
-}
-
-void* mem_alloc(size_t s) {
-    return calloc(s, 1);
-}
-
-void mem_free(void* ptr) {
-    free(ptr);
-}
+#include "utils.h"
 
 /* Interval */
 

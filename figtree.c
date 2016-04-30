@@ -4,6 +4,7 @@
 
 #include "figtree.h"
 #include "interval.h"
+#include "utils.h"
 
 /* Fig Tree Entry */
 
@@ -30,7 +31,7 @@ struct ft_node {
     int entries_len;
     struct ft_ent entries[FT_SPLITLIMIT];
     int subtrees_len;
-    struct ft_node* subtrees[FT_SPLITLIMIT + 1];
+    struct subtree_ptr subtrees[FT_SPLITLIMIT + 1];
     int HEIGHT;
 };
 
@@ -48,7 +49,7 @@ void _ftn_subtrees_add(struct ft_node* this, int index, struct ft_node* new) {
            this->subtrees_len <= FT_SPLITLIMIT, "Bad index in _ftn_subtrees_add");
     memmove(&this->subtrees[index + 1], &this->subtrees[index],
             (this->subtrees_len - index) * sizeof(struct ft_node*));
-    this->subtrees[index] = new;
+    subtree_set(&this->subtrees[index], new);
     this->subtrees_len++;
 }   
 
@@ -76,7 +77,7 @@ void ftn_clear(struct ft_node* this, bool make_height) {
         firstchild = ftn_new(this->HEIGHT - 1, true);
     }
     this->entries_len = 0;
-    this->subtrees[0] = firstchild;
+    subtree_set(&this->subtrees[0], firstchild);
     this->subtrees_len = 1;
 }
 
@@ -89,7 +90,7 @@ struct ft_node* ftn_insert(struct ft_node* this, struct ft_ent* newent,
            (index == this->entries_len ||
             !fte_overlaps(newent, &this->entries[index])), "bad ftn_insert");
     _ftn_entries_add(this, index, newent);
-    this->subtrees[index] = leftChild;
+    subtree_set(&this->subtrees[index], leftChild);
     _ftn_subtrees_add(this, index + 1, rightChild);
 
     if (this->entries_len == FT_SPLITLIMIT) {
@@ -115,8 +116,8 @@ struct ft_node* ftn_insert(struct ft_node* this, struct ft_ent* newent,
         pushup = ftn_new(this->HEIGHT + 1, false);
         pushup->entries[0] = this->entries[FT_ORDER];
         pushup->entries_len = 1;
-        pushup->subtrees[0] = left;
-        pushup->subtrees[1] = right;
+        subtree_set(&pushup->subtrees[0], left);
+        subtree_set(&pushup->subtrees[1], right);
         pushup->subtrees_len = 2;
 
         return pushup;
@@ -138,7 +139,8 @@ void ftn_replaceEntries(struct ft_node* this, int start, int end,
 }
 
 void ftn_pruneTo(struct ft_node* this, struct interval* valid) {
-    struct ft_node* subtree;
+    struct ft_node* true_subtree;
+    struct subtree_ptr* subtree;
     struct interval* entryint;
     
     bool entrydel[this->entries_len];
@@ -159,7 +161,7 @@ void ftn_pruneTo(struct ft_node* this, struct interval* valid) {
     memset(subtreedel, 0x00, this->subtrees_len);
 
     entryint = &this->entries[i].irange;
-    subtree = this->subtrees[i];
+    subtree = &this->subtrees[i];
 
     while (i_leftOf_int(entryint, valid)) {
         entrydel[i] = true;
@@ -170,12 +172,12 @@ void ftn_pruneTo(struct ft_node* this, struct interval* valid) {
             goto performdeletes;
         }
         entryint = &this->entries[i].irange;
-        subtree = this->subtrees[i];
+        subtree = &this->subtrees[i];
     }
 
     if (i_leftOverlaps(valid, entryint)) {
-        if (subtree != NULL) {
-            ftn_clear(subtree, true);
+        if ((true_subtree = subtree_get(subtree)) != NULL) {
+            ftn_clear(true_subtree, true);
         }
 
         // In case the valid boundary is in the middle of this interval
@@ -186,7 +188,7 @@ void ftn_pruneTo(struct ft_node* this, struct interval* valid) {
             goto performdeletes;
         }
         entryint = &this->entries[i].irange;
-        subtree = this->subtrees[i];
+        subtree = &this->subtrees[i];
     }
 
     while (i_contains_int(valid, entryint)) {
@@ -195,7 +197,7 @@ void ftn_pruneTo(struct ft_node* this, struct interval* valid) {
             goto performdeletes;
         }
         entryint = &this->entries[i].irange;
-        subtree = this->subtrees[i];
+        subtree = &this->subtrees[i];
     }
 
     /* At this point, entryint is either overlapping with the right edge of
@@ -204,11 +206,11 @@ void ftn_pruneTo(struct ft_node* this, struct interval* valid) {
      * skip over it. From now on, we need to index subtrees with i + 1 (so
      * that SUBTREE is the right subtree of ENTRY).
      */
-    subtree = this->subtrees[i + 1];
+    subtree = &this->subtrees[i + 1];
 
     if (i_rightOverlaps(valid, entryint)) {
-        if (subtree != NULL) {
-            ftn_clear(subtree, true);
+        if ((true_subtree = subtree_get(subtree)) != NULL) {
+            ftn_clear(true_subtree, true);
         }
 
         // In case the valid boundary is in the middle of this interval
@@ -219,7 +221,7 @@ void ftn_pruneTo(struct ft_node* this, struct interval* valid) {
             goto performdeletes;
         }
         entryint = &this->entries[i].irange;
-        subtree = this->subtrees[i + 1];
+        subtree = &this->subtrees[i + 1];
     }
 
     while (i_rightOf_int(entryint, valid)) {
@@ -248,9 +250,6 @@ void ftn_pruneTo(struct ft_node* this, struct interval* valid) {
             this->subtrees[j] = this->subtrees[i];
             j++;
         }
-    }
-    if (j == 0) {
-        printf("Setting subtrees_len to %d\n", j);
     }
     this->subtrees_len = j;
 
@@ -347,7 +346,7 @@ struct insertcont _ft_insert(struct figtree* this, struct insertargs* args,
                     ic.leftc->pathIndices = pathIndices;
                     // A new entry is to be added to pathIndices later
                     ic.leftc->pathIndices_len = args->pathIndices_len + 1;
-                    ic.leftc->at = currnode->subtrees[i];
+                    ic.leftc->at = subtree_get(&currnode->subtrees[i]);
                     memcpy(&ic.leftc->valid, valid, sizeof(struct interval));
                     i_restrict_range(&ic.leftc->valid, i == 0 ? BYTE_INDEX_MIN :
                                      previval->right + 1,
@@ -383,7 +382,7 @@ struct insertcont _ft_insert(struct figtree* this, struct insertargs* args,
                     ic.rightc->pathIndices = pathIndices;
                     // A new entry is to be added to pathIndices later
                     ic.rightc->pathIndices_len = args->pathIndices_len + 1;
-                    ic.rightc->at = currnode->subtrees[i + 1];
+                    ic.rightc->at = subtree_get(&currnode->subtrees[i + 1]);
                     memcpy(&ic.rightc->valid, valid, sizeof(struct interval));
                     i_restrict_range(&ic.rightc->valid,
                                      previous->irange.right + 1,
@@ -405,7 +404,7 @@ struct insertcont _ft_insert(struct figtree* this, struct insertargs* args,
             } else if (i_rightOf_int(currival, range)) {
                 path[args->path_len++] = currnode;
                 pathIndices[args->pathIndices_len++] = i;
-                currnode = currnode->subtrees[i];
+                currnode = subtree_get(&currnode->subtrees[i]);
                 /* What if previval and currival are adjacent intervals? Then
                  * the entire subtree can be pruned. This is represented by the
                  * special empty interval.
@@ -417,7 +416,7 @@ struct insertcont _ft_insert(struct figtree* this, struct insertargs* args,
         }
         path[args->path_len++] = currnode;
         pathIndices[args->pathIndices_len++] = numentries;
-        currnode = currnode->subtrees[numentries];
+        currnode = subtree_get(&currnode->subtrees[numentries]);
         i_restrict_range(valid, currival == NULL ? BYTE_INDEX_MIN :
                          currival->right + 1, BYTE_INDEX_MAX, true);
     }
@@ -466,9 +465,9 @@ struct insertcont _ft_insert(struct figtree* this, struct insertargs* args,
                      * path. We also need to adjust the index accordingly.
                      */
                     if (insertindex <= FT_ORDER) {
-                        path[pathindex] = rv->subtrees[0];
+                        path[pathindex] = subtree_get(&rv->subtrees[0]);
                     } else {
-                        path[pathindex] = rv->subtrees[1];
+                        path[pathindex] = subtree_get(&rv->subtrees[1]);
                         pathIndices[pathindex] = (insertindex -= (FT_ORDER + 1));
                     }
                 }
@@ -487,8 +486,8 @@ struct insertcont _ft_insert(struct figtree* this, struct insertargs* args,
                 goto endtreeinsertion;
             }
             topush = &rv->entries[0];
-            left = rv->subtrees[0];
-            right = rv->subtrees[1];
+            left = subtree_get(&rv->subtrees[0]);
+            right = subtree_get(&rv->subtrees[1]);
         }
 
         // No parent to push to
@@ -500,10 +499,10 @@ struct insertcont _ft_insert(struct figtree* this, struct insertargs* args,
             args->pathIndices_len++;
             memmove(&path[1], path, args->path_len * sizeof(struct ft_node*));
             args->path_len++;
-            if (nextpathmember == rv->subtrees[1]) {
+            if (nextpathmember == subtree_get(&rv->subtrees[1])) {
                 pathIndices[0] = 1;
             } else {
-                ASSERT(nextpathmember == rv->subtrees[0], "First element of path is not child of newly pushed up root");
+                ASSERT(nextpathmember == subtree_get(&rv->subtrees[0]), "First element of path is not child of newly pushed up root");
                 pathIndices[0] = 0;
             }
             finalsharedindex++;

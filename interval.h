@@ -5,18 +5,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-typedef uint32_t byte_index_t;
-
-#define BYTE_INDEX_MIN 0
-#define BYTE_INDEX_MAX UINT32_MAX
-
-#define MAX(x, y) ((x) > (y) ? (x) : (y))
-#define MIN(x, y) ((x) < (y) ? (x) : (y))
-
-#define ASSERT my_assert
-void my_assert(bool x, char* desc);
-void* mem_alloc(size_t s);
-void mem_free(void* ptr);
+#include "utils.h"
 
 struct interval {
     byte_index_t left;
