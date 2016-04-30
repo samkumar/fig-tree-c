@@ -47,7 +47,7 @@ void _ftn_subtrees_add(struct ft_node* this, int index, struct ft_node* new) {
     ASSERT(index >= 0 && index <= this->subtrees_len &&
            this->subtrees_len <= FT_SPLITLIMIT, "Bad index in _ftn_subtrees_add");
     memmove(&this->subtrees[index + 1], &this->subtrees[index],
-            (this->subtrees_len - index) * sizeof(struct ft_ent));
+            (this->subtrees_len - index) * sizeof(struct ft_node*));
     this->subtrees[index] = new;
     this->subtrees_len++;
 }   
