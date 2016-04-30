@@ -102,7 +102,7 @@ void _ft_insert(struct figtree* this, struct insertargs* args,
                  * j == numentries. In either case, PREVIOUS is the last entry
                  * in the node that overlaps with RANGE.
                  */
-                ftn_replaceEntries(currnode, i, j, range, value);
+
                 if (previous->irange.right > range->right) {
                     // Create a continuation for the right subinterval
                     ic->hasrightc = true;
@@ -124,6 +124,7 @@ void _ft_insert(struct figtree* this, struct insertargs* args,
                      * path index to that of the right continuation. */
                     /* If there's also a left continuation, then we adjust the
                      * index for the left continuation. */
+                    pathIndices[args->pathIndices_len++] = i + 1;
                 } else {
                     /* There's no right continuation that will adjust the final
                      * shared path index for the left continuation. So, we need
@@ -132,6 +133,12 @@ void _ft_insert(struct figtree* this, struct insertargs* args,
                      */
                     pathIndices[args->pathIndices_len++] = i;
                 }
+
+                /* Now that we have created the continuations, we can replace
+                 * the appropriate entries in the node with the new one.
+                 */
+                ftn_replaceEntries(currnode, i, j, range, value);
+                
 		goto treeinsertion;
             } else if (i_rightOf_int(currival, range)) {
                 path[args->path_len++] = currnode;
@@ -182,7 +189,8 @@ void _ft_insert(struct figtree* this, struct insertargs* args,
                  * All indices in the pathIndices and path lists at or before
                  * FINALSHAREDINDEX are shared with the path in a left
                  * continuation that has not yet been executed. If any nodes get
-                 * split along that path, we need to update the path accordingly.
+                 * split along that path, we need to update the path
+                 * accordingly.
                  * 
                  * Special case: we need to artificially decrement the stored
                  * insertindex at the FINALSHAREDINDEX because the left
@@ -259,7 +267,8 @@ void _ft_insert(struct figtree* this, struct insertargs* args,
 void ft_write(struct figtree* this, byte_index_t start, byte_index_t end,
               figtree_value_t value) {
     // Plus one because the height of the tree may increase on insert
-    int maxdepth = this->root->HEIGHT + 1;
+    // Plus one because the height of a leaf is 0, not 1
+    int maxdepth = this->root->HEIGHT + 2;
     struct ft_node* path[maxdepth];
     int pathIndices[maxdepth];
     struct insertargs iargs;
@@ -286,15 +295,28 @@ void ft_write(struct figtree* this, byte_index_t start, byte_index_t end,
         ASSERT(!newstarinserts.hasleftc && !newstarinserts.hasrightc,
                "Recursive star insert on left continuation");
     }
+}
 
-    // Free the (aliased) lists of the continuations
-    if (starinserts.hasleftc) {
-        mem_free(starinserts.leftc.path);
-        mem_free(starinserts.leftc.pathIndices);
-    } else if (starinserts.hasrightc) {
-        mem_free(starinserts.rightc.path);
-        mem_free(starinserts.rightc.pathIndices);
+figtree_value_t* ft_lookup(struct figtree* this, byte_index_t location) {
+    struct ft_node* currnode = this->root;
+
+    outerloop:
+    while (currnode != NULL) {
+        int i;
+        for (i = 0; i < currnode->entries_len; i++) {
+            struct ft_ent* current = &currnode->entries[i];
+            struct interval* currival = &current->irange;
+            if (i_contains_val(currival, location)) {
+                return &current->value;
+            } else if (currival->left > location) {
+                currnode = subtree_get(&currnode->subtrees[i]);
+                goto outerloop;
+            }
+        }
+        currnode = subtree_get(&currnode->subtrees[currnode->entries_len]);
     }
+
+    return NULL;
 }
 
 void ft_dealloc(struct figtree* this) {

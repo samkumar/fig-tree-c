@@ -29,7 +29,7 @@ struct interval* i_copy(struct interval* this) {
 }
 
 bool i_contains_val(struct interval* this, byte_index_t x) {
-    return x > this->left && x < this->right;
+    return x >= this->left && x <= this->right;
 }
 
 bool i_contains_int(struct interval* this, struct interval* other) {
@@ -55,7 +55,7 @@ void i_restrict_int(struct interval* this, struct interval* to, bool allowempty)
 }
 
 bool i_overlaps(struct interval* this, struct interval* other) {
-    return this->right > other->left && this->left <= other->right;
+    return this->right >= other->left && this->left <= other->right;
 }
 
 bool i_leftOverlaps(struct interval* this, struct interval* other) {
@@ -83,6 +83,10 @@ bool i_rightOf_int(struct interval* this, struct interval* other) {
 }
 
 bool i_equals(struct interval* this, struct interval* other) {
-    return this->left == other->left && this->right == other->right &&
-        this->nonempty == other->nonempty;
+    if (this->nonempty == other->nonempty) {
+        return !this->nonempty ||
+            (this->left == other->left && this->right == other->right);
+    } else {
+        return false;
+    }
 }

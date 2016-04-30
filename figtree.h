@@ -17,6 +17,9 @@ void ft_init(struct figtree* this);
 void ft_write(struct figtree* this, byte_index_t start, byte_index_t end,
               figtree_value_t value);
 
+/* Returns a pointer to the value at the specified byte LOCATION. */
+figtree_value_t* ft_lookup(struct figtree* this, byte_index_t location);
+
 /* Deallocates the resources for the Fig Tree in the specified space. */
 void ft_dealloc(struct figtree* this);
 
