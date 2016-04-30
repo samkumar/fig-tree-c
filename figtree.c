@@ -13,13 +13,6 @@ struct ft_ent {
     figtree_value_t value;
 };
 
-struct ft_ent* fte_new(struct interval* range, figtree_value_t value) {
-    struct ft_ent* this = mem_alloc(sizeof(struct ft_ent));
-    memcpy(&this->irange, range, sizeof(struct interval));
-    this->value = value;
-    return this;
-}
-
 bool fte_overlaps(struct ft_ent* this, struct ft_ent* other) {
     return i_overlaps(&this->irange, &other->irange);
 }
@@ -46,13 +39,13 @@ void _ftn_entries_add(struct ft_node* this, int index, struct ft_ent* new) {
 
 void _ftn_subtrees_add(struct ft_node* this, int index, struct ft_node* new) {
     ASSERT(index >= 0 && index <= this->subtrees_len &&
-           this->subtrees_len <= FT_SPLITLIMIT, "Bad index in _ftn_subtrees_add");
+           this->subtrees_len <= FT_SPLITLIMIT,
+           "Bad index in _ftn_subtrees_add");
     memmove(&this->subtrees[index + 1], &this->subtrees[index],
             (this->subtrees_len - index) * sizeof(struct ft_node*));
     subtree_set(&this->subtrees[index], new);
     this->subtrees_len++;
-}   
-
+}
 
 void ftn_clear(struct ft_node* this, bool make_height);
 
@@ -132,11 +125,16 @@ struct ft_node* ftn_insert(struct ft_node* this, struct ft_ent* newent,
 }
 
 void ftn_replaceEntries(struct ft_node* this, int start, int end,
-                        struct ft_ent* newent) {
+                        struct interval* newent_interval,
+                        figtree_value_t newentry_value) {
     ASSERT(this->entries_len + 1 == this->subtrees_len, "entry-subtree invariant violated in ftn_replaceEntries");
     ASSERT(start >= 0 && start < this->entries_len
            && end >= 0 && end <= this->entries_len, "bad ftn_replaceEntries");
-    memcpy(&this->entries[start], newent, sizeof(struct ft_ent));
+    
+    memcpy(&this->entries[start].irange, newent_interval,
+           sizeof(struct interval));
+    this->entries[start].value = newentry_value;
+    
     memmove(&this->entries[start + 1], &this->entries[end],
             (this->entries_len - end) * sizeof(struct ft_ent));
     memmove(&this->subtrees[start + 1], &this->subtrees[end],
@@ -370,7 +368,7 @@ void _ft_insert(struct figtree* this, struct insertargs* args,
                  * j == numentries. In either case, PREVIOUS is the last entry
                  * in the node that overlaps with RANGE.
                  */
-                ftn_replaceEntries(currnode, i, j, fte_new(range, value));
+                ftn_replaceEntries(currnode, i, j, range, value);
                 if (previous->irange.right > range->right) {
                     // Create a continuation for the right subinterval
                     ic->hasrightc = true;
@@ -443,6 +441,7 @@ void _ft_insert(struct figtree* this, struct insertargs* args,
             insertindex = pathIndices[pathindex];
             rv = ftn_insert(insertinto, topushent, insertindex, left, right);
             mem_free(topushnode);
+            topushnode = rv;
             
             if (rightcontinuation) {
                 /*
@@ -465,22 +464,22 @@ void _ft_insert(struct figtree* this, struct insertargs* args,
                     }
                 }
 
-                if (rv != NULL) {
+                if (topushnode != NULL) {
                     /* If this node is being split, then there are some
                      * complications. We need to change the node itself along
                      * the path. We also need to adjust the index accordingly.
                      */
                     if (insertindex <= FT_ORDER) {
-                        path[pathindex] = subtree_get(&rv->subtrees[0]);
+                        path[pathindex] = subtree_get(&topushnode->subtrees[0]);
                     } else {
-                        path[pathindex] = subtree_get(&rv->subtrees[1]);
+                        path[pathindex] = subtree_get(&topushnode->subtrees[1]);
                         pathIndices[pathindex] =
                             (insertindex -= (FT_ORDER + 1));
                     }
                 }
             }
 
-            if (rv == NULL) {
+            if (topushnode == NULL) {
                 // Nothing to push up
                 /* Edge case: If we didn't hit the case where
                  * pathindex == finalsharedindex, we need to make sure that that
@@ -492,13 +491,14 @@ void _ft_insert(struct figtree* this, struct insertargs* args,
                 }
                 return;
             }
-            topushent = &rv->entries[0];
-            left = subtree_get(&rv->subtrees[0]);
-            right = subtree_get(&rv->subtrees[1]);
+            
+            topushent = &topushnode->entries[0];
+            left = subtree_get(&topushnode->subtrees[0]);
+            right = subtree_get(&topushnode->subtrees[1]);
         }
 
         // No parent to push to
-        this->root = rv;
+        this->root = topushnode;
         if (rightcontinuation) {
             struct ft_node* nextpathmember = path[0];
             memmove(&pathIndices[1], pathIndices,
@@ -506,10 +506,10 @@ void _ft_insert(struct figtree* this, struct insertargs* args,
             args->pathIndices_len++;
             memmove(&path[1], path, args->path_len * sizeof(struct ft_node*));
             args->path_len++;
-            if (nextpathmember == subtree_get(&rv->subtrees[1])) {
+            if (nextpathmember == subtree_get(&topushnode->subtrees[1])) {
                 pathIndices[0] = 1;
             } else {
-                ASSERT(nextpathmember == subtree_get(&rv->subtrees[0]),
+                ASSERT(nextpathmember == subtree_get(&topushnode->subtrees[0]),
                        "First element of path is not a child of the new root");
                 pathIndices[0] = 0;
             }
@@ -561,4 +561,9 @@ void ft_write(struct figtree* this, byte_index_t start, byte_index_t end,
         mem_free(starinserts.rightc.path);
         mem_free(starinserts.rightc.pathIndices);
     }
+}
+
+void ft_dealloc(struct figtree* this) {
+    ftn_free(this->root);
+    this->root = NULL;
 }
