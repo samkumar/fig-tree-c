@@ -115,12 +115,16 @@ struct ft_node* ftn_insert(struct ft_node* this, struct ft_ent* newent,
 void ftn_replaceEntries(struct ft_node* this, int start, int end,
                         struct interval* newent_interval,
                         figtree_value_t newent_value) {
+    int i;
     ASSERT(this->entries_len + 1 == this->subtrees_len, "entry-subtree invariant violated in ftn_replaceEntries");
     ASSERT(start >= 0 && start < this->entries_len
            && end >= 0 && end <= this->entries_len, "bad ftn_replaceEntries");
     ASSERT(end > start, "replaceEntries called on empty range");
 
-    /* TODO free the dropped subtrees? */
+    // Free the subtrees that are going to be dropped
+    for (i = start + 1; i < end; i++) {
+        subtree_free(&this->subtrees[i]);
+    }
     
     memcpy(&this->entries[start].irange, newent_interval,
            sizeof(struct interval));
