@@ -100,7 +100,10 @@ void _ft_insert(struct figtree* this, struct insertargs* args,
                     i_init(&ic->rightc.range, range->right + 1,
                            previous->irange.right);
                     ic->rightc.value = previous->value;
-                    ic->rightc.at = subtree_get(&currnode->subtrees[i + 1]);
+                    /* After we replace entries i ... j - 1 with the new
+                     * entry, we need to continue with what is now subtree j.
+                     */
+                    ic->rightc.at = subtree_get(&currnode->subtrees[j]);
                     memcpy(&ic->rightc.valid, valid, sizeof(struct interval));
                     i_restrict_range(&ic->rightc.valid,
                                      previous->irange.right + 1,

@@ -119,6 +119,8 @@ void ftn_replaceEntries(struct ft_node* this, int start, int end,
     ASSERT(start >= 0 && start < this->entries_len
            && end >= 0 && end <= this->entries_len, "bad ftn_replaceEntries");
     ASSERT(end > start, "replaceEntries called on empty range");
+
+    /* TODO free the dropped subtrees? */
     
     memcpy(&this->entries[start].irange, newent_interval,
            sizeof(struct interval));
