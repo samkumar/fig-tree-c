@@ -4,7 +4,7 @@ SRCS=main.c figtree.c figtreenode.c interval.c utils.c
 EXECUTABLES=figtree_test
 
 CC=gcc
-CFLAGS=-O0 -ggdb3 -Wall -Wextra -Werror -Wpedantic -pedantic-errors -std=gnu11
+CFLAGS=-O3 -pthread -Wall -Wextra -Werror -Wpedantic -pedantic-errors -std=gnu11
 LDFLAGS=
 
 OBJS=$(SRCS:.c=.o)

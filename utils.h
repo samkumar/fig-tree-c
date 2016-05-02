@@ -7,7 +7,7 @@
 typedef uint32_t byte_index_t;
 typedef long int figtree_value_t;
 
-#define FT_ORDER 5
+#define FT_ORDER 2
 #define FT_SPLITLIMIT (1 + (FT_ORDER << 1))
 
 struct subtree_ptr {
