@@ -132,10 +132,12 @@ struct test_args {
 
 void* test_start(void* _args) {
     struct test_args* args = _args;
+    unsigned int seed = args->seed;
+    int threadid = args->threadid;
     long unsigned int i = 1;
     while (true) {
-        printf("THREAD %d: ROUND %lu\n", args->threadid, i);
-        args->seed = test_figtree(args->seed, args->threadid);
+        printf("THREAD %d: ROUND %lu\n", threadid, i);
+        seed = test_figtree(seed, threadid);
         i++;
     }
     return NULL;
@@ -166,7 +168,7 @@ int main(int argc, char** argv) {
     }
 
     ASSERT(pthread_attr_init(&attr) == 0, "Could not initialize pthread_attr");
-    ASSERT(pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED) == 0,
+    ASSERT(pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE) == 0,
            "Could not set detach state of pthread_attr");
     
     for (c = 0; c < numthreads; c++) {
@@ -181,5 +183,10 @@ int main(int argc, char** argv) {
 
     ASSERT(pthread_attr_destroy(&attr) == 0, "Could not destroy pthread_attr");
 
-    pthread_exit(NULL); // so the other threads keep running
+    /* The test_args are on this thread's stack... so we need to keep this
+     * thread running in order to avoid race conditions.
+     */
+    for (c = 0; c < numthreads; c++) {
+        pthread_join(realids[c], NULL);
+    }
 }
