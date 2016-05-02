@@ -136,7 +136,7 @@ void* test_start(void* _args) {
     int threadid = args->threadid;
     long unsigned int i = 1;
     while (true) {
-        printf("THREAD %d: ROUND %lu\n", threadid, i);
+        printf("THREAD %d: ROUND %lu [seed = %u]\n", threadid, i, seed);
         seed = test_figtree(seed, threadid);
         i++;
     }
