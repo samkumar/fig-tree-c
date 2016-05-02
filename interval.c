@@ -45,12 +45,14 @@ void i_restrict_range(struct interval* this, byte_index_t left,
         this->right = BYTE_INDEX_MIN;
         this->nonempty = false;
     } else {
+        ASSERT(newleft <= newright, "Restricting results in empty interval");
         this->left = newleft;
         this->right = newright;
     }
 }
 
-void i_restrict_int(struct interval* this, struct interval* to, bool allowempty) {
+void i_restrict_int(struct interval* this, struct interval* to,
+                    bool allowempty) {
     i_restrict_range(this, to->left, to->right, allowempty);
 }
 
