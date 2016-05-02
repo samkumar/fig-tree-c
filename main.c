@@ -8,10 +8,10 @@
 #define MAX_FILE_SIZE (1 << BYTE_INDEX_BITS)
 #define BYTE_INDEX_MASK (MAX_FILE_SIZE - 1)
 
-#define PRINT_FREQ_BITS 12
+#define PRINT_FREQ_BITS 16
 #define PRINT_FREQ_MASK ((1 << PRINT_FREQ_BITS) - 1)
 
-#define NUM_ITERATIONS (0x800000)
+#define NUM_ITERATIONS (0x400000)
 
 #define MAGIC 0xb96904ab6ff9f2f5
 
@@ -40,8 +40,6 @@ void test_figtree(unsigned int seed) {
             start = end;
             end = temp;
         }
-        printf("%d: Writing [%lu, %lu]: 0x%x\n", i, (long unsigned int) start,
-               (long unsigned int) end, (unsigned int) value);
         ft_write(&ft, start, end, value);
         for (j = start; j <= end; j++) {
             file[j] = value;
