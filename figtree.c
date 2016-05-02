@@ -128,7 +128,7 @@ void _ft_insert(struct figtree* this, struct insertargs* args,
                  */
                 ftn_replaceEntries(currnode, i, j, range, value);
                 
-		goto treeinsertion;
+                goto treeinsertion;
             } else if (i_rightOf_int(currival, range)) {
                 path[*path_len] = currnode;
                 pathIndices[(*path_len)++] = i;
