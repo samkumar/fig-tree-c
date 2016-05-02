@@ -22,15 +22,16 @@ figtree_value_t* ft_lookup(struct figtree* this, byte_index_t location);
 
 
 /* Returns an iterator to read over the specified range of bytes. */
-struct figtree_iter* read(struct figtree* this,
-                          byte_index_t start, byte_index_t end);
+struct figtree_iter* ft_read(struct figtree* this,
+                             byte_index_t start, byte_index_t end);
 
 /* Deallocates the resources for the Fig Tree in the specified space. */
 void ft_dealloc(struct figtree* this);
 
 /* File-Indexed Group (FIG)
  * Identical in structure to a Fig Tree Entry, but this is used to return
- * ranges, not to store them.
+ * ranges, not to store them. Remember that the irange field represents
+ * a closed interval!
  */
 typedef struct fig {
     struct interval irange;
@@ -44,7 +45,7 @@ typedef struct fig {
  * if the tree was not populated with a value for some bytes in the range, then
  * none of the yielded ranges will contain those bytes.
  */
-typedef struct figtree_iter figtree_iter_t;
+typedef struct figtree_iter figiter_t;
 
 /* Gets the next FIG from the Fig Tree Iterator and populates NEXT with that
  * result. Returns true if there are additional FIGs in the iterator; returns

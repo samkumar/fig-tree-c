@@ -309,7 +309,6 @@ figtree_value_t* ft_lookup(struct figtree* this, byte_index_t location) {
  * iteration.
  */
 struct figtree_iterstate {
-    struct ft_ent* entry;
     struct ft_node* node;
     int pos; // index of the next subtree to look at
     struct interval valid;
@@ -318,7 +317,6 @@ struct figtree_iterstate {
 void ft_iterstate_init(struct figtree_iterstate* this, struct ft_node* node,
                        struct interval* valid) {
     this->node = node;
-    this->entry = NULL;
     this->pos = -1; // index of the entry we just looked at
     memcpy(&this->valid, valid, sizeof(struct interval));
 }
@@ -328,15 +326,14 @@ void ft_iterstate_init(struct figtree_iterstate* this, struct ft_node* node,
  * at index DEPTH.
  */
 struct figtree_iter {
-    byte_index_t end;
     int depth; // Index into following array
 };
 
-struct figtree_iter* read(struct figtree* this,
-                          byte_index_t start, byte_index_t end) {
+/* Returns an iterator over the closed interval [START, END]. */
+struct figtree_iter* ft_read(struct figtree* this,
+                             byte_index_t start, byte_index_t end) {
     struct interval initvalid;
     struct ft_ent* entry;
-    struct interval* oldvalid;
     struct figtree_iter* iterator =
         mem_alloc(sizeof(struct figtree_iter) +
                   (sizeof(struct figtree_iterstate) *
@@ -344,16 +341,16 @@ struct figtree_iter* read(struct figtree* this,
     struct figtree_iterstate* iterstates =
         (struct figtree_iterstate*) (iterator + 1);
     struct figtree_iterstate* rs = &iterstates[0];
-    iterator->end = end;
+    struct figtree_iterstate* ors; /* temp. pointer to change rs */
     iterator->depth = 0;
 
-    i_init(&initvalid, BYTE_INDEX_MIN, BYTE_INDEX_MAX);
+    i_init(&initvalid, start, end);
     ft_iterstate_init(rs, this->root, &initvalid);
 
     continueouterloop:
     while (rs->node != NULL) {
         struct interval* previval;
-        struct interval* currival = &initvalid;
+        struct interval* currival = NULL;
         while (++rs->pos < rs->node->entries_len) {
             entry = &rs->node->entries[rs->pos];
             previval = currival;
@@ -361,26 +358,28 @@ struct figtree_iter* read(struct figtree* this,
             if (i_contains_val(currival, start)) {
                 goto breakouterloop;
             } else if (i_rightOf_val(currival, start)) {
-                oldvalid = &rs->valid;
+                ors = rs;
                 rs = &iterstates[++iterator->depth];
-                ft_iterstate_init(rs, subtree_get(&rs->node->subtrees[rs->pos]),
-                                  oldvalid);
-                i_restrict_range(&rs->valid, previval->right + 1,
+                ft_iterstate_init(rs,
+                                  subtree_get(&ors->node->subtrees[ors->pos]),
+                                  &ors->valid);
+                i_restrict_range(&rs->valid, previval == NULL ?
+                                 BYTE_INDEX_MIN : (previval->right + 1),
                                  currival->left - 1, false);
                 goto continueouterloop;
             }
         }
-        oldvalid = &rs->valid;
+        ors = rs;
         rs = &iterstates[++iterator->depth];
-        ft_iterstate_init(rs, subtree_get(&rs->node->subtrees[rs->pos]),
-                          oldvalid);
+        ft_iterstate_init(rs, subtree_get(&ors->node->subtrees[ors->pos]),
+                          &ors->valid);
         i_restrict_range(&rs->valid, currival->right + 1, BYTE_INDEX_MAX,
                          false);
     }
     breakouterloop:
-    while (rs != NULL && (rs->pos == rs->node->entries_len ||
-                          i_leftOf_int(&rs->valid,
-                                       &rs->node->entries[rs->pos].irange))) {
+    while (iterator->depth != -1 &&
+           (rs->node == NULL || rs->pos == rs->node->entries_len ||
+            i_leftOf_int(&rs->valid, &rs->node->entries[rs->pos].irange))) {
         rs = &iterstates[--iterator->depth];
     }
     
@@ -393,8 +392,7 @@ void ft_dealloc(struct figtree* this) {
 }
 
 /* Populates NEXT with the next fig (i.e. the next range of bytes and the
- * value it corresponds to). Returns true if there are additional figs; returns
- * false otherwise.
+ * value it corresponds to), or returns false if there is no next fig.
  */
 bool fti_next(struct figtree_iter* this, struct fig* next) {
     struct figtree_iterstate* states = (struct figtree_iterstate*) (this + 1);
@@ -402,28 +400,21 @@ bool fti_next(struct figtree_iter* this, struct fig* next) {
     struct interval* oldvalid;
     struct ft_ent* entry; // the current entry
 
-    /* At the end of the iteration, either (1) this->depth is -1 (meaning we
-     * backtracked past the top of the tree) or (2) the next entry is past
-     * this->end.
+    /* At the end of the iteration, we backtrack up the tree past the root since
+     * all nodes appear "invalid" given the restricted valid interval.
      */
-
-    // Check termination condition (1) (in case they call next() past the end)
     if (this->depth == -1) {
         return false;
     }
     rs = &states[this->depth];
-    ASSERT (rs->pos < rs->node->entries_len, "Iterator starting at end of interior node");
+    ASSERT (rs->pos < rs->node->entries_len,
+            "Iterator starting at end of interior node");
     entry = &rs->node->entries[rs->pos];
 
     // Populate next with what we're going to yield
     memcpy(&next->irange, &entry->irange, sizeof(struct interval));
-    i_restrict_int(&next->irange, &rs->valid, true);
+    i_restrict_int(&next->irange, &rs->valid, false);
     next->value = entry->value;
-
-    // Check termination condition (2) (in case they call next() past the end)
-    if (!next->irange.nonempty) {
-        return false;
-    }
 
     /* Now that we've populated NEXT, we need to do the hard part, which is
      * figuring out whether there's something else that comes after this, while
@@ -449,7 +440,7 @@ bool fti_next(struct figtree_iter* this, struct fig* next) {
         if (++rs->pos == rs->node->entries_len) {
             rightlimit = BYTE_INDEX_MAX;
         } else {
-            rightlimit = entry->irange.left - 1;
+            rightlimit = rs->node->entries[rs->pos].irange.left - 1;
         }
 
         /* If the next entry in this node is adjacent to the one we just
@@ -457,7 +448,7 @@ bool fti_next(struct figtree_iter* this, struct fig* next) {
          * why we have this if statement.
          */
         if (leftlimit <= rightlimit) {
-            subtree = subtree_get(&rs->node->subtrees[++rs->pos]);
+            subtree = subtree_get(&rs->node->subtrees[rs->pos]);
 
             /* This is the loop where we drill down the subtree. */
             while (subtree != NULL) {
@@ -473,10 +464,10 @@ bool fti_next(struct figtree_iter* this, struct fig* next) {
                  */
 
                 /* Skip entries to the left of the valid interval. */
-                while (++rs->pos < rs->node->entries_len &&
+                while (++rs->pos != rs->node->entries_len &&
                        i_leftOf_int(&rs->node->entries[rs->pos].irange,
                                     &rs->valid)) {
-                    /* Do nothing; everything is handled in the loop. */
+                    /* Do nothing; the loop condition does all the work. */
                 }
 
                 if (rs->pos == 0) {
@@ -500,7 +491,7 @@ bool fti_next(struct figtree_iter* this, struct fig* next) {
                     }
                     rightlimit = rs->node->entries[rs->pos].irange.left - 1;
                 }
-                subtree = subtree_get(&rs->node->subtrees[++rs->pos]);
+                subtree = subtree_get(&rs->node->subtrees[rs->pos]);
             }
         }
     }
@@ -516,23 +507,18 @@ bool fti_next(struct figtree_iter* this, struct fig* next) {
      * node.
      */
     while (rs->pos == rs->node->entries_len ||
-           !i_leftOf_int(&rs->valid, &rs->node->entries[rs->pos].irange)) {
+           i_leftOf_int(&rs->valid, &rs->node->entries[rs->pos].irange)) {
         /* If we backtrack up beyond the root, then we've walked past what's in
          * the tree, and there's nothing more to yield.
          */
         if (--this->depth == -1) {
-            return false;
+            return true;
         }
         rs = &states[this->depth];
     }
 
-    /* At this point, rs->node->entries[rs->pos] is the entry to yield next.
-     * Check for the second termination condition: if this new entry is past
-     * the end of the query, then what we populated NEXT with at the beginning
-     * s the final fig.
-     */
-    return !i_rightOf_val(&rs->node->entries[rs->pos].irange, this->end) &&
-        !i_rightOf_val(&rs->valid, this->end);
+    /* At this point, rs->node->entries[rs->pos] is the entry to yield next. */
+    return true;
 }
 
 void fti_free(struct figtree_iter* this) {
