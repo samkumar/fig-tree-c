@@ -1,24 +1,21 @@
+# This is based on Makefiles from CS 162 homework assignments
+
+SRCS=main.c figtree.c figtreenode.c interval.c utils.c
+EXECUTABLES=figtree_test
+
+CC=gcc
 CFLAGS=-O0 -ggdb3 -Wall -Wextra -Werror -Wpedantic -pedantic-errors -std=gnu11
+LDFLAGS=
 
-all: figtree_test
+OBJS=$(SRCS:.c=.o)
 
-figtree_test: main.o figtree.o figtreenode.o interval.o utils.o
-	gcc $(CFLAGS) main.o figtree.o figtreenode.o interval.o utils.o -o figtree_test
+all: $(EXECUTABLES)
 
-main.o:
-	gcc $(CFLAGS) -c main.c -o main.o
+$(EXECUTABLES): $(OBJS)
+	$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) -o $@
 
-figtree.o:
-	gcc $(CFLAGS) -c figtree.c -o figtree.o
-
-figtreenode.o:
-	gcc $(CFLAGS) -c figtreenode.c -o figtreenode.o
-
-interval.o:
-	gcc $(CFLAGS) -c interval.c -o interval.o
-
-utils.o:
-	gcc $(CFLAGS) -c utils.c -o utils.o
+.c.o:
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f figtree_test *.o *~
+	rm -rf $(EXECUTABLES) $(OBJS) *~
