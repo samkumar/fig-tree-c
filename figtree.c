@@ -373,7 +373,8 @@ struct figtree_iter* ft_read(struct figtree* this,
         rs = &iterstates[++iterator->depth];
         ft_iterstate_init(rs, subtree_get(&ors->node->subtrees[ors->pos]),
                           &ors->valid);
-        i_restrict_range(&rs->valid, currival->right + 1, BYTE_INDEX_MAX,
+        i_restrict_range(&rs->valid, currival == NULL ?
+                         BYTE_INDEX_MIN: (currival->right + 1), BYTE_INDEX_MAX,
                          false);
     }
     breakouterloop:
