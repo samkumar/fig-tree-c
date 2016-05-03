@@ -189,4 +189,6 @@ int main(int argc, char** argv) {
     for (c = 0; c < numthreads; c++) {
         pthread_join(realids[c], NULL);
     }
+
+    return 0;
 }
