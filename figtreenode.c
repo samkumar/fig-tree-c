@@ -29,7 +29,7 @@ void _ftn_subtrees_add(struct ft_node* this, int index, struct ft_node* new) {
            this->subtrees_len <= FT_SPLITLIMIT,
            "Bad index in _ftn_subtrees_add");
     memmove(&this->subtrees[index + 1], &this->subtrees[index],
-            (this->subtrees_len - index) * sizeof(struct ft_node*));
+            (this->subtrees_len - index) * sizeof(struct subtree_ptr));
     subtree_set(&this->subtrees[index], new);
     this->subtrees_len++;
 }
@@ -133,7 +133,7 @@ void ftn_replaceEntries(struct ft_node* this, int start, int end,
     memmove(&this->entries[start + 1], &this->entries[end],
             (this->entries_len - end) * sizeof(struct ft_ent));
     memmove(&this->subtrees[start + 1], &this->subtrees[end],
-            (this->subtrees_len - end) * sizeof(struct ft_node*));
+            (this->subtrees_len - end) * sizeof(struct subtree_ptr));
 
     this->entries_len -= (end - start - 1);
     this->subtrees_len -= (end - start - 1);
